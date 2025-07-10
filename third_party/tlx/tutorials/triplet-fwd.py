@@ -196,6 +196,17 @@ def _triplet_tlx_fwd_kernel(
         
         # consumer group
         with tlx.async_task(num_warps=NUM_MMA_WARPS // NUM_MMA_GROUPS, registers=232, replicate=NUM_MMA_GROUPS):
+            # prepare offsets
+            kv1_idx_start = tl.maximum(0, q_idx - w1 + 1)
+            kv1_idx_end = tl.minimum(seq_len, q_idx + 1)
+            num_of_kv1_trips = kv1_idx_end - kv1_idx_start
+
+            # kv2_offset_y = offs_b * k2_stride_b + kv2_start * k2_stride_s
+            # TODO: check the boundary cases
+            # k1o_offset = offs_b * k1_stride_b + kv1_idx_start * k1_stride_s
+            # v1o_offset = offs_b * v1_stride_b + kv1_idx_start * v1_stride_s
+
+
             # initialize pointer to m and l
             m_i = tl.zeros([BLOCK_M_SPLIT], dtype=tl.float32) - float("inf")
             l_i = tl.zeros([BLOCK_M_SPLIT], dtype=tl.float32) + 1.0
@@ -295,8 +306,10 @@ def _triplet_tlx_fwd_kernel(
                     v2_tile_rmem = tlx.local_load(v2_tile)
 
                     v12_tile_rmem = v1_tile_rmem * v2_tile_rmem  # [BLOCK_SIZE_KV, HEAD_DIM]
-                    p = p.to(gemm_dtype)
-                    acc = tlx.async_dot(p, v12_tile_rmem, acc)
+                    tlx.local_store(v2_tile, v12_tile_rmem) # [BLOCK_SIZE_KV, HEAD_DIM]
+
+                    p = p.to(gemm_dtype) # [BLOCK_M_SPLIT, BLOCK_SIZE_KV]
+                    acc = tlx.async_dot(p, v2_tile, acc) # [BLOCK_M_SPLIT, HEAD_DIM]
                     # ===== Section 2: END =====
 
                     # ===== Section 3: online softmax for the current iteration =====
@@ -337,8 +350,10 @@ def _triplet_tlx_fwd_kernel(
             v1_tile_rmem = tlx.local_load(v1_tile)
 
             v12_tile_rmem = v1_tile_rmem * v2_tile_rmem  # [BLOCK_SIZE_K, HEAD_DIM]
+            tlx.local_store(v2_tile, v12_tile_rmem) # [BLOCK_SIZE_K, HEAD_DIM]
+
             p = p.to(gemm_dtype)
-            acc = tlx.async_dot(p, v12_tile_rmem, acc)
+            acc = tlx.async_dot(p, v2_tile, acc)
             acc = tlx.async_dot_wait(0, acc)
             v2_empty = tlx.local_view(v2_empties, v2_buf_id)
             tlx.barrier_wait(v2_empty, 1)

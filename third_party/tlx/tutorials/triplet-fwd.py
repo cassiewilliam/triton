@@ -119,21 +119,17 @@ def _triplet_tlx_fwd_kernel(
     v2_empties = tlx.alloc_barriers(num_barriers=NUM_BUFFERS, arrive_count=NUM_MMA_GROUPS)
     v2_fulls = tlx.alloc_barriers(num_barriers=NUM_BUFFERS, arrive_count=1)
 
-    q_idx = tl.program_id(0)
-    offs_b = tl.program_id(1)
-
-    kv2_start = tl.maximum(0, q_idx - w2 + 1)
-    kv2_end = tl.minimum(seq_len, q_idx + 1)
-
-    # dtypes
-    data_dtype = tl.bfloat16
-    # compute_dtype = tl.float32
-    gemm_dtype = tl.bfloat16
 
     with tlx.async_tasks():
         # producer group
         with tlx.async_task("default"):
             # initialize offsets
+            q_idx = tl.program_id(0)
+            offs_b = tl.program_id(1)
+
+            kv2_start = tl.maximum(0, q_idx - w2 + 1)
+            kv2_end = tl.minimum(seq_len, q_idx + 1)
+
             kv1_idx_start = tl.maximum(0, q_idx - w1 + 1)
             kv1_idx_end = tl.minimum(seq_len, q_idx + 1)
             num_of_kv1_trips = kv1_idx_end - kv1_idx_start
@@ -145,22 +141,19 @@ def _triplet_tlx_fwd_kernel(
             # load q: it will stay in SRAM throughout
             for cid in tl.range(0, NUM_MMA_GROUPS, loop_unroll_factor=NUM_MMA_GROUPS):
                 q_full = tlx.local_view(q_fulls, cid)
-                q_bytes_per_element = tlx.dtype_of(desc_q).itemsize # 2
-                tlx.barrier_expect_bytes(q_full, q_bytes_per_element * BLOCK_M_SPLIT * HEAD_DIM)
+                tlx.barrier_expect_bytes(q_full, 2 * BLOCK_M_SPLIT * HEAD_DIM)
                 q_tile = tlx.local_view(q_tiles, cid)
                 qo_offset_ysplit = offs_b * q_stride_b + q_idx * q_stride_s + cid * BLOCK_M_SPLIT
                 tlx.async_descriptor_load(desc_q, q_tile, [qo_offset_ysplit, 0], q_full)
 
 
             k1_full= tlx.local_view(k1_fulls, 0)
-            k1_bytes_per_element = tlx.dtype_of(desc_k1).itemsize # 2
-            tlx.barrier_expect_bytes(k1_full, k1_bytes_per_element * HEAD_DIM * w1)
+            tlx.barrier_expect_bytes(k1_full, 2 * HEAD_DIM * w1)
             k1_tile = tlx.local_view(k1_tiles, 0)
             tlx.async_descriptor_load(desc_k1, k1_tile, [k1o_offset, 0], k1_full)
-            
+
             v1_full = tlx.local_view(v1_fulls, 0)
-            v1_bytes_per_element = tlx.dtype_of(desc_v1).itemsize # 2
-            tlx.barrier_expect_bytes(v1_full, v1_bytes_per_element * HEAD_DIM * w1)
+            tlx.barrier_expect_bytes(v1_full, 2 * HEAD_DIM * w1)
             v1_tile = tlx.local_view(v1_tiles, 0)
             tlx.async_descriptor_load(desc_v1, v1_tile, [v1o_offset, 0], v1_full)
 
@@ -193,10 +186,16 @@ def _triplet_tlx_fwd_kernel(
 
                 kv2_offset_y += BLOCK_SIZE_KV
                 acc_cnt += 1
-        
+
         # consumer group
         with tlx.async_task(num_warps=NUM_MMA_WARPS // NUM_MMA_GROUPS, registers=232, replicate=NUM_MMA_GROUPS):
             # prepare offsets
+            q_idx = tl.program_id(0)
+            offs_b = tl.program_id(1)
+
+            kv2_start = tl.maximum(0, q_idx - w2 + 1)
+            kv2_end = tl.minimum(seq_len, q_idx + 1)
+
             kv1_idx_start = tl.maximum(0, q_idx - w1 + 1)
             kv1_idx_end = tl.minimum(seq_len, q_idx + 1)
             num_of_kv1_trips = kv1_idx_end - kv1_idx_start
@@ -211,9 +210,9 @@ def _triplet_tlx_fwd_kernel(
             m_i = tl.zeros([BLOCK_M_SPLIT], dtype=tl.float32) - float("inf")
             l_i = tl.zeros([BLOCK_M_SPLIT], dtype=tl.float32) + 1.0
             acc = tl.zeros([BLOCK_M_SPLIT, HEAD_DIM], dtype=tl.float32)
-            
-            # load scales            
-            softmax_scale = tl.cast(SM_SCALE, gemm_dtype)
+
+            # load scales
+            softmax_scale = tl.cast(SM_SCALE, tlx.dtype_of(desc_q))
 
             cid = tlx.async_task_replica_id()
 
@@ -308,7 +307,7 @@ def _triplet_tlx_fwd_kernel(
                     v12_tile_rmem = v1_tile_rmem * v2_tile_rmem  # [BLOCK_SIZE_KV, HEAD_DIM]
                     tlx.local_store(v2_tile, v12_tile_rmem) # [BLOCK_SIZE_KV, HEAD_DIM]
 
-                    p = p.to(gemm_dtype) # [BLOCK_M_SPLIT, BLOCK_SIZE_KV]
+                    p = p.to(tlx.dtype_of(desc_q)) # [BLOCK_M_SPLIT, BLOCK_SIZE_KV]
                     acc = tlx.async_dot(p, v2_tile, acc) # [BLOCK_M_SPLIT, HEAD_DIM]
                     # ===== Section 2: END =====
 
@@ -327,16 +326,16 @@ def _triplet_tlx_fwd_kernel(
 
                     m_i = m_ij
                     # ===== Section 3: END =====
-                    
+
                     # ===== Section 4: update acc for the current iteration =====
-                    # wait for the previous p v12 mma [Section 2] to finish 
+                    # wait for the previous p v12 mma [Section 2] to finish
                     acc = tlx.async_dot_wait(0, acc)
                     v2_empty = tlx.local_view(v2_empties, v2_buf_id)
                     tlx.barrier_wait(v2_empty, 0)
                     acc = acc * alpha[:, None]
                     acc_cnt += 1
                     # ===== Section 4: END =====
-            
+
             # ===== Section 5: compute P@V1V2 for the last iteration =====
             # wait for the last V buffer to be populated by the producer
             v2_buf_id = acc_cnt % NUM_BUFFERS
@@ -352,7 +351,7 @@ def _triplet_tlx_fwd_kernel(
             v12_tile_rmem = v1_tile_rmem * v2_tile_rmem  # [BLOCK_SIZE_K, HEAD_DIM]
             tlx.local_store(v2_tile, v12_tile_rmem) # [BLOCK_SIZE_K, HEAD_DIM]
 
-            p = p.to(gemm_dtype)
+            p = p.to(tlx.dtype_of(desc_q))
             acc = tlx.async_dot(p, v2_tile, acc)
             acc = tlx.async_dot_wait(0, acc)
             v2_empty = tlx.local_view(v2_empties, v2_buf_id)
@@ -361,7 +360,7 @@ def _triplet_tlx_fwd_kernel(
 
             # ===== Section 6: epilogue =====
             qo_offset_ysplit = offs_b * q_stride_b + q_idx * q_stride_s + cid * BLOCK_M_SPLIT
-            desc_o.store([qo_offset_ysplit, 0], acc.to(data_dtype))
+            desc_o.store([qo_offset_ysplit, 0], acc.to(tlx.dtype_of(desc_o)))
             # ===== Section 6: END =====
 
 def get_tensor_descriptor(

@@ -248,7 +248,8 @@ def tlx_attention_fwd(
                 view_15 = tlx.local_reinterpret(view_6, tl.float16)
                 view_16 = tlx.local_view(result_2, 0)
                 view_17 = tlx.local_view(barrier_45, 0)
-                tlx.async_dot(view_15, view_13, view_16, mBarriers=[view_11, view_17, barrier_47])
+                view_t = tlx.local_view(barrier_47, 0)
+                tlx.async_dot(view_15, view_13, view_16, mBarriers=[view_11, view_17, view_t])  #barrier_47])
                 # dot0_slice0_iter_i+1
                 val_128 = arg65 + 1
                 val_131 = 0 if val_128 == 2 else val_128

@@ -258,9 +258,9 @@ def tlx_attention_fwd(
                 view_19 = tlx.local_view(barrier_27, val_131)
                 view_20 = tlx.local_view(buffer_23, val_131)
                 view_21 = tlx.local_trans(view_20)
-                tlx.barrier_wait(view_19, val_132, start_n < val_121)
-                tlx.barrier_wait(view_5, arg67 ^ 1, start_n < val_121)
-                tlx.async_dot(buffer_q0, view_21, view_6, pred=start_n < val_121, mBarriers=[view_18, view_7])
+                tlx.barrier_wait(view_19, val_132)  #, pred=start_n < val_121)
+                tlx.barrier_wait(view_5, arg67 ^ 1)  #, pred=start_n < val_121)
+                tlx.async_dot(buffer_q0, view_21, view_6, mBarriers=[view_18, view_7])  #pred=start_n < val_121
                 view_22 = tlx.local_reinterpret(view_9, tl.float16)
                 view_23 = tlx.local_view(barrier_55, 0)
                 tlx.barrier_wait(view_23, arg67 ^ 1)
@@ -268,10 +268,11 @@ def tlx_attention_fwd(
                 # dot1_slice1_iter_i
                 view_24 = tlx.local_view(result, 0)
                 view_25 = tlx.local_view(barrier_57, 0)
-                tlx.async_dot(view_22, view_13, view_24, mBarriers=[view_11, view_25, barrier_59])
-                tlx.barrier_wait(view_8, arg67 ^ 1, start_n < val_121)
+                view_t = tlx.local_view(barrier_59, 0)
+                tlx.async_dot(view_22, view_13, view_24, mBarriers=[view_11, view_25, view_t])
+                tlx.barrier_wait(view_8, arg67 ^ 1)  #, pred=start_n < val_121)
                 # dot0_slice1_iter_i+1
-                tlx.async_dot(buffer_q1, view_21, view_9, pred=start_n < val_121, mBarriers=[view_18, view_10])
+                tlx.async_dot(buffer_q1, view_21, view_9, mBarriers=[view_18, view_10])  #pred=start_n < val_121
 
                 # update arg65/arg66/arg67
                 arg65 = val_131
@@ -317,11 +318,11 @@ def tlx_attention_fwd(
                 val_141 = 0 if val_138 == 2 else val_138
                 val_142 = arg67 ^ 1 if val_138 == 2 else arg67
                 view_10 = tlx.local_view(barrier_24, val_141)
-                tlx.barrier_wait(view_10, val_142, pred=start_n < val_126)
+                tlx.barrier_wait(view_10, val_142)  #, pred=start_n < val_126)
                 view_11 = tlx.local_view(barrier_27, val_141)
                 tlx.barrier_expect_bytes(view_11, 32768)
                 view_12 = tlx.local_view(buffer_23, val_141)
-                tlx.async_descriptor_load(desc_k, view_12, [val_137, 0], view_11, pred=start_n < val_126)
+                tlx.async_descriptor_load(desc_k, view_12, [val_137, 0], view_11)  #, pred=start_n < val_126)
 
                 # update args
                 arg70 = arg65

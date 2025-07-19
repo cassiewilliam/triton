@@ -160,11 +160,13 @@ else()
 
     # On CMake builds of LLVM, the output of llvm-config --cxxflags does not
     # include -fno-rtti, leading to linker errors. Be sure to add it.
-    if(NOT MSVC AND (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")))
-        if(NOT ${LLVM_CXXFLAGS} MATCHES "-fno-rtti")
-            set(LLVM_CXXFLAGS "${LLVM_CXXFLAGS} -fno-rtti")
-        endif()
-    endif()
+    # if(NOT MSVC AND (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")))
+        # if(NOT ${LLVM_CXXFLAGS} MATCHES "-fno-rtti")
+            # set(LLVM_CXXFLAGS "${LLVM_CXXFLAGS} -fno-rtti")
+        # endif()
+    # endif()
+    set(LLVM_CXXFLAGS "${LLVM_CXXFLAGS} -fexceptions")
+    message(STATUS "DAOHANG_DEBUG: The value of LLVM_CXXFLAGS is: ${LLVM_CXXFLAGS}")
 
     # Remove some clang-specific flags for gcc.
     if(CMAKE_COMPILER_IS_GNUCXX)

@@ -1527,6 +1527,7 @@ class TritonSemantic(Generic[TensorTy]):
     
         assert self.builder.codegen_fns.get("min_dot_size") is not None, "target doesn't provide lower shape bounds for dot."
         min_dot_size = self.builder.codegen_fns["min_dot_size"](lhs.type, rhs.type)
+        # import pdb; pdb.set_trace()
         assert tl._unwrap_if_constexpr(lhs.shape[-2]) >= min_dot_size[0] and tl._unwrap_if_constexpr(lhs.shape[-1]) >= min_dot_size[2] \
             and tl._unwrap_if_constexpr(rhs.shape[-1]) >= min_dot_size[1], \
                 f"Input shapes should have M >= {min_dot_size[0]}, N >= {min_dot_size[1]} and K >= {min_dot_size[2]}"

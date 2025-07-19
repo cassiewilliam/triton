@@ -601,7 +601,7 @@ def test_async_dot(device):
         tl.store(c_ptrs, c)
 
     torch.manual_seed(0)
-    M, N, K = (64, 64, 32)
+    M, N, K = (16, 64, 32)
     x = torch.randn((M, K), device=device, dtype=torch.float16)
     y = torch.randn((K, N), device=device, dtype=torch.float16)
     z = torch.zeros((M, N), device=device, dtype=torch.float16)

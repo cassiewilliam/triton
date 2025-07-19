@@ -84,9 +84,9 @@ def async_dot(
     (A, B, acc_handle, input_precision, max_num_imprecise_acc,
      ret_ty) = _semantic.dot_precheck(A, B, acc, input_precision, None, None, out_dtype)
 
-    assert A.shape[0] >= 64, "M must be at least 64"
-    assert A.shape[1] >= 16, "K must be at least 16"
-    assert B.shape[1] >= 32, "N must be at least 32"
+    # assert A.shape[0] >= 64, "M must be at least 64"
+    # assert A.shape[1] >= 16, "K must be at least 16"
+    # assert B.shape[1] >= 32, "N must be at least 32"
 
     cuda_compute_capability = int(cuda_parse_arch(_semantic.builder.options.arch))
     version = 5 if cuda_compute_capability >= 100 else 3

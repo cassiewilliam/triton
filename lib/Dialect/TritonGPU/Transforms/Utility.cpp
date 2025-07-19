@@ -1,5 +1,6 @@
 #include "triton/Analysis/Utility.h"
 
+#include <exception>
 #include <fstream>
 
 #include "mlir/Analysis/SliceAnalysis.h"
@@ -42,6 +43,8 @@ SmallVector<unsigned, 3> mmaVersionToInstrShape(int version,
   } else if (version == 3) {
     unsigned k = 256 / eltType.getIntOrFloatBitWidth();
     if (shape[0] % 64 != 0 || shape[1] % 8 != 0) {
+      // printf("DAOHANG_DEBUG\n");
+      throw std::exception();
       assert(false && "type not supported");
       return {0, 0, 0};
     }

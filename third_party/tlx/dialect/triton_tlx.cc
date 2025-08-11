@@ -434,6 +434,10 @@ void init_triton_tlx_ir(py::module &&m) {
                                        memorySpace, /*mutableMemory=*/true);
              return self.create<ttg::LocalAllocOp>(memDesc);
            })
+      .def("create_clc_try_cancel",
+           [](TritonOpBuilder &self, Value response, Value mbarrier) -> void {
+             self.create<ttng::AsyncCLCTryCancelOp>(response, mbarrier);
+           })
       .def("create_async_TMA_load",
            [](TritonOpBuilder &self, Value desc, std::vector<Value> &coord,
               Value mbarrier, Value pred, Value result,

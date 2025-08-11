@@ -287,6 +287,14 @@ def TTNG_NamedBarrierWaitOp : TTNG_Op<"wait_barrier_named", []> {
   let assemblyFormat = "$bar `,` $numThreads attr-dict `:` type(operands)";
 }
 
+def TTNG_AsyncCLCTryCancelOp : TTNG_Op<"async_clc_try_cancel", []> {
+  let summary = "Try cancel unlaunched clusters and store results in CLC response";
+
+  let arguments = (ins I32:$response, I32:$bar);
+
+  let assemblyFormat = "$response `,` $bar attr-dict `:` type(operands)";
+}
+
 def TTNG_AsyncTMACopyGlobalToLocalOp : TTNG_Op<"async_tma_copy_global_to_local"> {
   let summary = "copy data based on descriptor from global memory to local memory asynchronously";
 

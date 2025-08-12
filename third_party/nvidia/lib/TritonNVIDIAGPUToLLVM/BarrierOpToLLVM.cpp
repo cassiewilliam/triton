@@ -313,6 +313,7 @@ struct NamedBarrierWaitOpConversion
 
 struct AsyncCLCTryCancelOpConversion
     : public ConvertOpToLLVMPattern<triton::nvidia_gpu::AsyncCLCTryCancelOp> {
+  // TODO. check target infor for compute capability >= 100
   using ConvertOpToLLVMPattern<
       triton::nvidia_gpu::AsyncCLCTryCancelOp>::ConvertOpToLLVMPattern;
 
@@ -329,8 +330,59 @@ struct AsyncCLCTryCancelOpConversion
         ptxBuilder.newOperand(adaptor.getResponse(), "r"),
         ptxBuilder.newOperand(adaptor.getBar(), "r")};
 
-    auto waitOp = *ptxBuilder.create<>(ptxAsm);
-    waitOp(operands, /*onlyAttachMLIRArgs=*/true);
+    auto clcOp = *ptxBuilder.create<>(ptxAsm);
+    clcOp(operands, /*onlyAttachMLIRArgs=*/true);
+    auto voidTy = void_ty(getContext());
+    ptxBuilder.launch(rewriter, op.getLoc(), voidTy);
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct AsyncCLCQueryCancelOpConversion
+    : public ConvertOpToLLVMPattern<triton::nvidia_gpu::AsyncCLCQueryCancelOp> {
+  // TODO. check target infor for compute capability >= 100
+  using ConvertOpToLLVMPattern<
+      triton::nvidia_gpu::AsyncCLCQueryCancelOp>::ConvertOpToLLVMPattern;
+  // clc.query_cancel.is_cancel.is_canceled.pred
+  // check if inst succeeds
+
+  // clc.query_cancel.get_first_ctaid
+  // query ctaid from response if succeeds otherwise -1
+
+  LogicalResult
+  matchAndRewrite(triton::nvidia_gpu::AsyncCLCQueryCancelOp op,
+                  OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op->getLoc();
+
+    // uint32_t valid = 0;
+    // int32_t xctaid = -1, yctaid = -1, zctaid = -1;
+    Value valid, xctaid, yctaid, zctaid;
+
+    std::string ptx = R"(
+    {
+      .reg .pred complete;
+      .reg .b128 clc_result;
+      ld.shared.b128 clc_result, [$0];
+      clusterlaunchcontrol.query_cancel.is_canceled.pred.b128 p1, clc_result;
+      selp.u32 $1, 1, 0, p1
+      @p1 clusterlaunchcontrol.query_cancel.get_first_ctaid.v4.b32.b128 {$2, $3, $4, _}, clc_result
+    }
+    )";
+
+    PTXBuilder ptxBuilder;
+    SmallVector<PTXBuilder::Operand *, 5> operands = {
+        ptxBuilder.newOperand(adaptor.getResponse(), "r"),
+        ptxBuilder.newOperand(valid, "b"),  // 1-bit pred
+        ptxBuilder.newOperand(xctaid, "r"), // 32-bit int
+        ptxBuilder.newOperand(yctaid, "r"),
+        ptxBuilder.newOperand(zctaid, "r"),
+    };
+
+    auto queryOp = *ptxBuilder.create<>(ptx);
+    queryOp(operands, /*onlyAttachMLIRArgs=*/true);
     auto voidTy = void_ty(getContext());
     ptxBuilder.launch(rewriter, op.getLoc(), voidTy);
 

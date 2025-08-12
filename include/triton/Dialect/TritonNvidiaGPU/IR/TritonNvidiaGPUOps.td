@@ -295,6 +295,14 @@ def TTNG_AsyncCLCTryCancelOp : TTNG_Op<"async_clc_try_cancel", []> {
   let assemblyFormat = "$response `,` $bar attr-dict `:` type(operands)";
 }
 
+def TTNG_AsyncCLCQueryCancelOp : TTNG_Op<"async_clc_query_cancel", []> {
+  let summary = "Parse CTA ID from CLC response";
+
+  let arguments = (ins I32:$response);
+
+  let assemblyFormat = "$response attr-dict `:` type(operands)";
+}
+
 def TTNG_AsyncTMACopyGlobalToLocalOp : TTNG_Op<"async_tma_copy_global_to_local"> {
   let summary = "copy data based on descriptor from global memory to local memory asynchronously";
 

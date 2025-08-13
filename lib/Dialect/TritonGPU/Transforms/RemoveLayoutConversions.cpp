@@ -1095,14 +1095,14 @@ static int64_t getByteCount(Value result, int64_t minElementCount = 0,
 void LayoutRematerialization::backwardRematerialization(
     ConvertLayoutOp convertOp) {
   RankedTensorType targetType = convertOp.getType();
-  if (isa<DotOperandEncodingAttr>(targetType.getEncoding())) {
+  //if (isa<DotOperandEncodingAttr>(targetType.getEncoding())) {
     // DotOperand is hoisted by hoistDotOperand for pipelining purposes.
-    if (auto parentForOp = convertOp->getParentOfType<scf::ForOp>()) {
-      if (getNumStagesOrDefault(parentForOp, 3) > 1) {
-        return;
-      }
-    }
-  }
+  //  if (auto parentForOp = convertOp->getParentOfType<scf::ForOp>()) {
+  //    if (getNumStagesOrDefault(parentForOp, 3) > 1) {
+  //      return;
+  //    }
+  //  }
+  // }
 
   Value oldV = convertOp.getSrc();
   LDBG("check backward remat with source " << oldV << " encoding "
